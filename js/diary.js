@@ -7,7 +7,7 @@ const Diary = (() => {
   const { el, $, $all, show, hide, escapeHtml, toast, round, uid } = Utils;
 
   let currentDate = Utils.todayKey();
-  let pendingPhotoFull = null;   // compressed data URL sent to API (max 1000px)
+  let pendingPhotoFull = null;   // compressed data URL sent to API (max 768px)
   let pendingPhotoThumb = null;  // small thumbnail for storage (~300px)
   let pendingSource = 'text';    // 'photo' | 'text'
   let previewDraft = null;       // { title, ingredients, clarificationQuestion }
@@ -15,9 +15,59 @@ const Diary = (() => {
 
   const RING_CIRCUMFERENCE = Math.PI * 100; // half-circle arc length, r=100 per index.html svg
 
+  // ---------- AI loading modal: spinner + countdown timer ----------
+  // Text analysis typically responds in ~3s, photo analysis in ~6s (larger
+  // payload). The countdown is only an expectation hint - if it runs out
+  // before the request finishes, we switch to a generic "almost done" label
+  // rather than showing a confusing negative/zero countdown.
+  let loadingTimerId = null;
+
+  function startLoadingTimer(kind) {
+    stopLoadingTimer();
+    let secondsLeft = kind === 'photo' ? 6 : 3;
+    const textEl = el('loading-text');
+    const timerEl = el('loading-timer');
+    if (textEl) textEl.textContent = 'Анализируем...';
+    if (timerEl) timerEl.textContent = `~${secondsLeft} сек`;
+    loadingTimerId = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft > 0) {
+        if (timerEl) timerEl.textContent = `~${secondsLeft} сек`;
+      } else {
+        if (timerEl) timerEl.textContent = '';
+        if (textEl) textEl.textContent = 'Почти готово...';
+      }
+    }, 1000);
+  }
+
+  function stopLoadingTimer() {
+    if (loadingTimerId) {
+      clearInterval(loadingTimerId);
+      loadingTimerId = null;
+    }
+    const textEl = el('loading-text');
+    const timerEl = el('loading-timer');
+    if (textEl) textEl.textContent = 'Анализируем...';
+    if (timerEl) timerEl.textContent = '';
+  }
+
+  // Always pair with closeLoadingModal() in a finally block so the spinner
+  // and the countdown timer never get stuck on screen, even if the request
+  // throws, times out, or returns malformed data.
+  function openLoadingModal(kind) {
+    Utils.openModal('modal-loading');
+    startLoadingTimer(kind);
+  }
+
+  function closeLoadingModal() {
+    stopLoadingTimer();
+    Utils.closeModal('modal-loading');
+  }
+
   // ---------- Rendering ----------
   function renderDay() {
     el('day-label').textContent = Utils.formatDayLabel(currentDate);
+    renderWeekStrip();
     const day = Storage.getDay(currentDate);
     const settings = Storage.getSettings();
     const targets = settings.targets;
@@ -42,12 +92,52 @@ const Diary = (() => {
     renderMacroBar('fat', totals.fat, targets.fat);
     renderMacroBar('carbs', totals.carbs, targets.carbs);
 
-    const latestWeight = Storage.getLatestWeight();
-    el('quick-weight-label').textContent = latestWeight
-      ? `Вес: ${round(latestWeight.value, 1)} кг`
-      : 'Обновить вес';
-
     renderMealsList(day.meals);
+    renderStreakBadge();
+  }
+
+  // ---------- Week strip (Mon-Sun calendar replacing the prev/next day arrows) ----------
+  function renderWeekStrip() {
+    weekAnchor = currentDate;
+    const days = Utils.weekDays(currentDate);
+    const today = Utils.todayKey();
+    const container = el('week-days');
+    container.innerHTML = days.map((key, i) => {
+      const dayNum = Number(key.slice(8, 10));
+      const isSelected = key === currentDate;
+      const isToday = key === today;
+      const cls = ['week-day'];
+      if (isSelected) cls.push('selected');
+      if (isToday) cls.push('is-today');
+      return `
+        <button class="${cls.join(' ')}" data-date="${key}">
+          <span class="week-day-dow">${Utils.WEEKDAYS_MON_RU[i]}</span>
+          <span class="week-day-num">${dayNum}</span>
+        </button>
+      `;
+    }).join('');
+    $all('.week-day', container).forEach((btn) => {
+      btn.addEventListener('click', () => selectDate(btn.dataset.date));
+    });
+  }
+
+  function selectDate(dateKey) {
+    currentDate = dateKey;
+    renderDay();
+  }
+
+  function changeWeek(delta) {
+    currentDate = Utils.addDays(currentDate, delta * 7);
+    renderDay();
+  }
+
+  // ---------- Streak badge ----------
+  function renderStreakBadge() {
+    const streak = Storage.getStreak();
+    const countEl = el('streak-count');
+    if (countEl) countEl.textContent = streak.count || 0;
+    const badge = el('streak-badge');
+    if (badge) badge.classList.toggle('streak-active', (streak.count || 0) > 0);
   }
 
   function renderMacroBar(key, value, target) {
@@ -93,7 +183,7 @@ const Diary = (() => {
     });
   }
 
-  // ---------- Day navigation ----------
+  // ---------- Day navigation (kept for external callers, e.g. deep links) ----------
   function changeDay(delta) {
     currentDate = Utils.addDays(currentDate, delta);
     renderDay();
@@ -157,7 +247,7 @@ const Diary = (() => {
       const file = input.files && input.files[0];
       if (!file) return;
       try {
-        const compressed = await Api.compressImage(file, 1000, 0.7);
+        const compressed = await Api.compressImage(file, 768, 0.65);
         await handleCapturedPhoto(compressed, true);
       } catch (e) {
         toast(e.message, 'error');
@@ -168,7 +258,7 @@ const Diary = (() => {
 
   async function handleCapturedPhoto(dataUrl, alreadyCompressed = false) {
     try {
-      pendingPhotoFull = alreadyCompressed ? dataUrl : await Api.compressDataUrl(dataUrl, 1000, 0.7);
+      pendingPhotoFull = alreadyCompressed ? dataUrl : await Api.compressDataUrl(dataUrl, 768, 0.65);
       pendingPhotoThumb = await Api.makeThumbnail(dataUrl, 300, 0.6);
       pendingSource = 'photo';
       openCommentModal();
@@ -209,7 +299,7 @@ const Diary = (() => {
       return;
     }
     Utils.closeModal('modal-comment');
-    Utils.openModal('modal-loading');
+    openLoadingModal(pendingSource);
     const settings = Storage.getSettings();
     try {
       let result;
@@ -223,11 +313,11 @@ const Diary = (() => {
           apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text
         });
       }
-      Utils.closeModal('modal-loading');
       openPreviewModal(result);
     } catch (e) {
-      Utils.closeModal('modal-loading');
       toast(e.message, 'error');
+    } finally {
+      closeLoadingModal();
     }
   }
 
@@ -249,7 +339,6 @@ const Diary = (() => {
     el('preview-title').value = previewDraft.title;
     renderPreviewIngredients();
     renderPreviewClarify();
-    renderPreviewTotals();
     Utils.openModal('modal-preview');
   }
 
@@ -276,7 +365,6 @@ const Diary = (() => {
         ing.fat = round(ing.fat * ratio, 1);
         ing.carbs = round(ing.carbs * ratio, 1);
         ing.weight = newWeight;
-        renderPreviewTotals();
         $('.ingredient-kcal', row).textContent = `${round(ing.kcal)} ккал`;
       });
     });
@@ -284,7 +372,6 @@ const Diary = (() => {
       btn.addEventListener('click', () => {
         previewDraft.ingredients = previewDraft.ingredients.filter((i) => i.id !== btn.dataset.del);
         renderPreviewIngredients();
-        renderPreviewTotals();
       });
     });
   }
@@ -300,14 +387,6 @@ const Diary = (() => {
     }
   }
 
-  function renderPreviewTotals() {
-    const totals = Nutrition.sumIngredients(previewDraft.ingredients);
-    el('preview-total-kcal').textContent = `${round(totals.kcal)} ккал`;
-    el('preview-total-protein').textContent = round(totals.protein);
-    el('preview-total-fat').textContent = round(totals.fat);
-    el('preview-total-carbs').textContent = round(totals.carbs);
-  }
-
   async function onPreviewClarifyRecalc() {
     const answer = el('preview-clarify-answer').value.trim();
     if (!answer) {
@@ -316,7 +395,7 @@ const Diary = (() => {
     }
     const text = el('comment-text') ? el('comment-text').value.trim() : '';
     Utils.closeModal('modal-preview');
-    Utils.openModal('modal-loading');
+    openLoadingModal(pendingSource);
     const settings = Storage.getSettings();
     try {
       let result;
@@ -330,11 +409,11 @@ const Diary = (() => {
           apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text, clarificationAnswer: answer
         });
       }
-      Utils.closeModal('modal-loading');
       openPreviewModal(result);
     } catch (e) {
-      Utils.closeModal('modal-loading');
       toast(e.message, 'error');
+    } finally {
+      closeLoadingModal();
     }
   }
 
@@ -497,12 +576,11 @@ const Diary = (() => {
     });
   }
 
+  // The "Итого" totals block was removed from the edit-meal card for a more
+  // minimal layout; this function is kept as a no-op so existing call sites
+  // (triggered on every ingredient edit) don't need to be touched one by one.
   function renderEditTotals() {
-    const totals = Nutrition.sumIngredients(editDraftIngredients);
-    el('edit-meal-total-kcal').textContent = `${round(totals.kcal)} ккал`;
-    el('edit-meal-total-protein').textContent = round(totals.protein);
-    el('edit-meal-total-fat').textContent = round(totals.fat);
-    el('edit-meal-total-carbs').textContent = round(totals.carbs);
+    // intentionally empty - no totals UI to update anymore
   }
 
   async function onEditMealAi() {
@@ -511,7 +589,7 @@ const Diary = (() => {
       toast('Опишите, что нужно добавить', 'error');
       return;
     }
-    Utils.openModal('modal-loading');
+    openLoadingModal('text');
     const settings = Storage.getSettings();
     try {
       const result = await Api.analyzeText({ apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text });
@@ -528,11 +606,11 @@ const Diary = (() => {
       renderEditIngredients();
       renderEditTotals();
       el('edit-meal-ai-text').value = '';
-      Utils.closeModal('modal-loading');
       toast('Ингредиенты добавлены');
     } catch (e) {
-      Utils.closeModal('modal-loading');
       toast(e.message, 'error');
+    } finally {
+      closeLoadingModal();
     }
   }
 
@@ -587,8 +665,8 @@ const Diary = (() => {
 
   // ---------- Init / event wiring ----------
   function bindEvents() {
-    el('day-prev').addEventListener('click', () => changeDay(-1));
-    el('day-next').addEventListener('click', () => changeDay(1));
+    el('week-prev').addEventListener('click', () => changeWeek(-1));
+    el('week-next').addEventListener('click', () => changeWeek(1));
 
     el('fab-add').addEventListener('click', openFabMenu);
     el('fab-overlay').addEventListener('click', (e) => {
@@ -612,7 +690,6 @@ const Diary = (() => {
     el('btn-save-edit-meal').addEventListener('click', onSaveEditMeal);
     el('btn-delete-meal').addEventListener('click', onDeleteMeal);
 
-    el('btn-quick-weight').addEventListener('click', openWeightModal);
     el('btn-weight-save').addEventListener('click', onSaveWeight);
 
     // Generic close buttons (data-close attribute) for all modals
@@ -635,6 +712,7 @@ const Diary = (() => {
 
   function init() {
     currentDate = Utils.todayKey();
+    Storage.touchStreak(); // opening the app counts toward today's streak
     bindEvents();
     renderDay();
   }

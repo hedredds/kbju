@@ -1,12 +1,13 @@
 /* api.js - RuRout AI integration: image compression + chat completions wrapper.
- * Endpoint: https://rurout.online/v1/chat/completions
- * Text analysis model: gpt-6-luna
+ * Default endpoint: https://rurout.online/v1/chat/completions
+ * Text analysis model: gemini-2.5-flash-lite
  * Photo analysis model: gemini-2.5-flash
  */
 'use strict';
 
 const Api = (() => {
   const DEFAULT_BASE_URL = 'https://rurout.online/v1';
+  const REQUEST_TIMEOUT_MS = 30000;
 
   // Builds the full chat completions endpoint from a configurable base URL,
   // trimming any trailing slash(es) so "https://host/v1/" and "https://host/v1"
@@ -84,50 +85,62 @@ const Api = (() => {
 
   async function callChatCompletions({ apiKey, baseUrl, model, messages }) {
     const endpoint = buildEndpoint(baseUrl);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let response;
     try {
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: buildHeaders(apiKey),
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature: 0.3
-        })
-      });
-    } catch (e) {
-      // A TypeError from fetch with no HTTP response usually means the request
-      // never reached the server - most commonly a CORS block, an unreachable/
-      // incorrect domain, or (less often) no network connectivity.
-      if (e instanceof TypeError) {
-        throw new Error(
-          `Не удалось выполнить запрос к "${endpoint}" (${e.message}). ` +
-          `Вероятная причина - блокировка CORS этим доменом или неверный Base URL в настройках API. ` +
-          `Проверьте Base URL и, если возможно, доступность сервера.`
-        );
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: buildHeaders(apiKey),
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature: 0.3
+          }),
+          signal: controller.signal
+        });
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          throw new Error('Сервис ИИ не ответил за 30 секунд - запрос прерван по таймауту. Попробуйте еще раз.');
+        }
+        // A TypeError from fetch with no HTTP response usually means the request
+        // never reached the server - most commonly a CORS block, an unreachable/
+        // incorrect domain, or (less often) no network connectivity.
+        if (e instanceof TypeError) {
+          throw new Error(
+            `Не удалось выполнить запрос к "${endpoint}" (${e.message}). ` +
+            `Вероятная причина - блокировка CORS этим доменом или неверный Base URL в настройках API. ` +
+            `Проверьте Base URL и, если возможно, доступность сервера.`
+          );
+        }
+        throw new Error(`Не удалось связаться с сервисом ИИ: ${e.message || e}`);
       }
-      throw new Error(`Не удалось связаться с сервисом ИИ: ${e.message || e}`);
-    }
 
-    if (!response.ok) {
-      throw await buildHttpError(response);
-    }
+      if (!response.ok) {
+        throw await buildHttpError(response);
+      }
 
-    let data;
-    try {
-      data = await response.json();
-    } catch (e) {
-      throw new Error('Сервис ИИ вернул некорректный (не-JSON) ответ.');
-    }
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        throw new Error('Сервис ИИ вернул некорректный (не-JSON) ответ.');
+      }
 
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error('Пустой ответ от сервиса ИИ.');
-    return extractJson(content);
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) throw new Error('Пустой ответ от сервиса ИИ.');
+      return extractJson(content);
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   // ---------- Image compression (Canvas) ----------
   // Returns a base64 JPEG data URL compressed to maxDim px, quality `quality`.
-  function compressImage(file, maxDim = 1000, quality = 0.7) {
+  // Default 768px/0.65 keeps requests to the AI small and fast while staying
+  // sharp enough for reliable food recognition.
+  function compressImage(file, maxDim = 768, quality = 0.65) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       const reader = new FileReader();
@@ -201,7 +214,7 @@ const Api = (() => {
 
   // Compress a data URL (not a File) - used for camera captures which are
   // already data URLs produced by canvas.toDataURL in camera.js.
-  function compressDataUrl(dataUrl, maxDim = 1000, quality = 0.7) {
+  function compressDataUrl(dataUrl, maxDim = 768, quality = 0.65) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {

@@ -4,6 +4,7 @@
 const Utils = (() => {
   const MONTHS_RU = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
   const WEEKDAYS_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  const WEEKDAYS_MON_RU = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
   function pad2(n) {
     return n < 10 ? '0' + n : '' + n;
@@ -47,6 +48,24 @@ const Utils = (() => {
   function formatWeekday(key) {
     const d = parseKey(key);
     return WEEKDAYS_RU[d.getDay()];
+  }
+
+  // Monday-first weekday index: 0=Mon ... 6=Sun (JS getDay() is Sunday-first).
+  function mondayIndex(date) {
+    return (date.getDay() + 6) % 7;
+  }
+
+  // Returns the Monday (as a dateKey) of the week containing `key`.
+  function weekStart(key) {
+    const d = parseKey(key);
+    d.setDate(d.getDate() - mondayIndex(d));
+    return dateKey(d);
+  }
+
+  // Returns an array of 7 dateKeys (Mon..Sun) for the week containing `key`.
+  function weekDays(key) {
+    const start = weekStart(key);
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
   }
 
   function formatTime(ts) {
@@ -136,6 +155,7 @@ const Utils = (() => {
     openModal, closeModal,
     pad2, dateKey, todayKey, parseKey, addDays,
     formatDayLabel, formatDayShort, formatWeekday, formatTime,
+    weekStart, weekDays, WEEKDAYS_MON_RU,
     round, clamp,
     $, $all, el, show, hide, escapeHtml,
     toast, debounce, uid

@@ -41,17 +41,27 @@
 
   <!-- ---------- PAGE: HOME (DIARY) ---------- -->
   <section id="page-home" class="page active">
-    <header class="top-bar">
-      <button class="day-nav-btn" id="day-prev" aria-label="Предыдущий день">
-        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <div class="day-label" id="day-label">Сегодня</div>
-      <button class="day-nav-btn" id="day-next" aria-label="Следующий день">
-        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
+    <header class="top-bar top-bar-home">
+      <div class="top-bar-spacer"></div>
+      <div class="app-title">KBJU</div>
+      <div class="streak-badge" id="streak-badge" title="Серия дней подряд">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 2c1.2 3-2.8 4.2-2.8 7.4a2.8 2.8 0 005.6 0c0-.9-.5-1.6-.9-2 2 1 4.1 3.3 4.1 6.1a6 6 0 11-12 0c0-4.1 3-6.3 4.1-8.4.8-1.3 1.2-2.1 1.9-3.1z" fill="currentColor"/></svg>
+        <span id="streak-count">0</span>
+      </div>
     </header>
 
+    <div class="week-strip">
+      <button class="week-nav-btn" id="week-prev" aria-label="Предыдущая неделя">
+        <svg width="16" height="16" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="week-days" id="week-days"></div>
+      <button class="week-nav-btn" id="week-next" aria-label="Следующая неделя">
+        <svg width="16" height="16" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+
     <div class="home-scroll">
+      <div class="selected-day-label" id="day-label">Сегодня</div>
       <div class="ring-card glass">
         <div class="ring-wrap">
           <svg viewBox="0 0 240 130" class="ring-svg" preserveAspectRatio="xMidYMid meet">
@@ -82,12 +92,6 @@
           </div>
         </div>
       </div>
-
-      <button class="weight-quick-btn glass" id="btn-quick-weight">
-        <svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
-        <span id="quick-weight-label">Обновить вес</span>
-        <span class="chev">&rsaquo;</span>
-      </button>
 
       <div class="meals-head">
         <span>Приемы пищи</span>
@@ -173,7 +177,7 @@
 
       <div class="settings-group glass">
         <div class="settings-group-title">О приложении</div>
-        <div class="settings-row"><span>Версия</span><span class="muted">1.0.0</span></div>
+        <div class="settings-row"><span>Версия</span><span class="muted">1.1.0</span></div>
         <button class="link-btn" id="link-policy">Политика конфиденциальности</button>
         <button class="link-btn" id="link-terms">Пользовательское соглашение</button>
       </div>
@@ -262,7 +266,8 @@
 <div id="modal-loading" class="modal-overlay hidden">
   <div class="loading-box glass">
     <div class="spinner"></div>
-    <div class="loading-text">Анализируем...</div>
+    <div class="loading-text" id="loading-text">Анализируем...</div>
+    <div class="loading-timer" id="loading-timer"></div>
   </div>
 </div>
 
@@ -274,20 +279,12 @@
       <button class="icon-btn" data-close="modal-preview">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="settings-field"><label>Название блюда</label><input type="text" id="preview-title"></div>
+      <div class="settings-field field-compact"><label>Название</label><input type="text" id="preview-title"></div>
       <div id="preview-ingredients" class="ingredients-list"></div>
       <div id="preview-clarify-box" class="clarify-box hidden">
         <div class="clarify-q" id="preview-clarify-q"></div>
         <textarea id="preview-clarify-answer" class="textarea" rows="2" placeholder="Ваш ответ..."></textarea>
         <button class="btn-secondary full" id="btn-preview-clarify-recalc">Пересчитать с ответом</button>
-      </div>
-      <div class="preview-total glass">
-        <div class="preview-total-row"><span>Итого</span><span id="preview-total-kcal">0 ккал</span></div>
-        <div class="preview-total-sub">
-          <span>Б: <b id="preview-total-protein">0</b> г</span>
-          <span>Ж: <b id="preview-total-fat">0</b> г</span>
-          <span>У: <b id="preview-total-carbs">0</b> г</span>
-        </div>
       </div>
       <button class="btn-primary full" id="btn-preview-save">Сохранить в дневник</button>
     </div>
@@ -302,16 +299,8 @@
       <button class="icon-btn" data-close="modal-edit-meal">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="settings-field"><label>Название</label><input type="text" id="edit-meal-name"></div>
+      <div class="settings-field field-compact"><label>Название</label><input type="text" id="edit-meal-name"></div>
       <div id="edit-meal-ingredients" class="ingredients-list"></div>
-      <div class="preview-total glass">
-        <div class="preview-total-row"><span>Итого</span><span id="edit-meal-total-kcal">0 ккал</span></div>
-        <div class="preview-total-sub">
-          <span>Б: <b id="edit-meal-total-protein">0</b> г</span>
-          <span>Ж: <b id="edit-meal-total-fat">0</b> г</span>
-          <span>У: <b id="edit-meal-total-carbs">0</b> г</span>
-        </div>
-      </div>
       <div class="settings-field"><label>Дополнить через ИИ</label>
         <div class="row-gap">
           <input type="text" id="edit-meal-ai-text" placeholder="Например: добавь 50 г сыра">

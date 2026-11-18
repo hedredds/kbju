@@ -10,8 +10,25 @@ const Storage = (() => {
     DAYS: 'kbju_days',                // { 'YYYY-MM-DD': { meals: [...] } }
     WEIGHTS: 'kbju_weights',          // [{date:'YYYY-MM-DD', value:number}]
     ONBOARDED: 'kbju_onboarded',      // 'true' | null
-    POLICY_ACCEPTED: 'kbju_policy_accepted'
+    POLICY_ACCEPTED: 'kbju_policy_accepted',
+    STREAK: 'kbju_streak'             // { count:number, lastDate:'YYYY-MM-DD' }
   };
+
+  // Local date helpers (storage.js loads before utils.js, so it cannot
+  // depend on Utils - these tiny helpers keep the streak logic self-contained).
+  function pad2Local(n) {
+    return n < 10 ? '0' + n : '' + n;
+  }
+  function todayKeyLocal() {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad2Local(d.getMonth() + 1)}-${pad2Local(d.getDate())}`;
+  }
+  function addDaysLocal(key, delta) {
+    const [y, m, d] = key.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + delta);
+    return `${dt.getFullYear()}-${pad2Local(dt.getMonth() + 1)}-${pad2Local(dt.getDate())}`;
+  }
 
   function read(key, fallback) {
     try {
@@ -47,7 +64,7 @@ const Storage = (() => {
     theme: 'light',
     apiKey: '',
     apiBaseUrl: 'https://rurout.online/v1',
-    modelText: 'gpt-6-luna',
+    modelText: 'gemini-2.5-flash-lite',
     modelPhoto: 'gemini-2.5-flash',
     targets: { kcal: 2000, protein: 120, fat: 70, carbs: 230 }
   };
@@ -98,6 +115,7 @@ const Storage = (() => {
     if (!meal.createdAt) meal.createdAt = Date.now();
     days[dateKey].meals.push(meal);
     setAllDays(days);
+    touchStreak();
     return meal;
   }
 
@@ -143,6 +161,26 @@ const Storage = (() => {
     return weights[weights.length - 1];
   }
 
+  // ---------- Streak (consecutive days of activity: opening app or logging food) ----------
+  // Call on every app launch and on every diary write. Advances the streak by
+  // one if the last recorded activity was yesterday, keeps it unchanged if it
+  // was already today, and resets to 1 if a day was missed.
+  function getStreak() {
+    return read(KEYS.STREAK, { count: 0, lastDate: null });
+  }
+  function touchStreak() {
+    const today = todayKeyLocal();
+    const streak = getStreak();
+    if (streak.lastDate === today) {
+      return streak;
+    }
+    const yesterday = addDaysLocal(today, -1);
+    const nextCount = streak.lastDate === yesterday ? (streak.count || 0) + 1 : 1;
+    const next = { count: nextCount, lastDate: today };
+    write(KEYS.STREAK, next);
+    return next;
+  }
+
   // ---------- Export / Reset ----------
   function exportAll() {
     return {
@@ -180,6 +218,7 @@ const Storage = (() => {
     getAllDays, setAllDays, getDay, saveDay,
     addMeal, updateMeal, deleteMeal,
     getWeights, addWeight, getLatestWeight,
+    getStreak, touchStreak,
     exportAll, resetAll,
     estimateStorageUsageKB
   };
