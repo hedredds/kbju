@@ -76,41 +76,25 @@ const App = (() => {
     }
   }
 
+  // The policy modal is now purely informational (opened from the onboarding
+  // consent step or from Settings -> "About"). There is no blocking first-run
+  // gate anymore - consent is captured solely via the checkbox on the final
+  // onboarding step, together with the optional email.
   function bindPolicyModalClose() {
     const policyOverlay = el('modal-policy');
     $all('[data-close="modal-policy"]').forEach((btn) => {
-      btn.addEventListener('click', onPolicyClosed);
+      btn.addEventListener('click', () => Utils.closeModal('modal-policy'));
     });
     policyOverlay.addEventListener('click', (e) => {
-      if (e.target === policyOverlay) onPolicyClosed();
+      if (e.target === policyOverlay) Utils.closeModal('modal-policy');
     });
-  }
-
-  // Only the first-run acceptance flow needs to continue bootstrap after the
-  // policy modal is closed; subsequent opens (from settings/onboarding links)
-  // are purely informational and this is a harmless no-op once the app/
-  // onboarding screen is already visible.
-  let firstRunPending = false;
-  function onPolicyClosed() {
-    Utils.closeModal('modal-policy');
-    if (firstRunPending) {
-      firstRunPending = false;
-      Storage.setPolicyAccepted(true);
-      proceedAfterPolicy();
-    }
   }
 
   function init() {
     applyTheme();
     bindPolicyModalClose();
     registerServiceWorker();
-
-    if (!Storage.isPolicyAccepted()) {
-      firstRunPending = true;
-      showPolicy('privacy');
-    } else {
-      proceedAfterPolicy();
-    }
+    proceedAfterPolicy();
   }
 
   return { init, showPolicy, showPage };

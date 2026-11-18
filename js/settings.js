@@ -51,6 +51,7 @@ const SettingsPage = (() => {
   function renderApiForm() {
     const settings = Storage.getSettings();
     el('set-apikey').value = settings.apiKey || '';
+    el('set-api-baseurl').value = settings.apiBaseUrl || Api.DEFAULT_BASE_URL;
     el('set-model-text').value = settings.modelText || '';
     el('set-model-photo').value = settings.modelPhoto || '';
   }
@@ -58,9 +59,11 @@ const SettingsPage = (() => {
   function onSaveApi() {
     const settings = Storage.getSettings();
     settings.apiKey = el('set-apikey').value.trim();
+    settings.apiBaseUrl = el('set-api-baseurl').value.trim().replace(/\/+$/, '') || Api.DEFAULT_BASE_URL;
     settings.modelText = el('set-model-text').value.trim() || settings.modelText;
     settings.modelPhoto = el('set-model-photo').value.trim() || settings.modelPhoto;
     Storage.setSettings(settings);
+    el('set-api-baseurl').value = settings.apiBaseUrl;
     toast('Настройки API сохранены');
   }
 

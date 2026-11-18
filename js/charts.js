@@ -14,6 +14,15 @@ const Charts = (() => {
     return node;
   }
 
+  // Decides how many bars to skip between visible X-axis labels so labels
+  // never overlap, regardless of how many data points are rendered (7 or 30).
+  function labelStep(count) {
+    if (count <= 10) return 1;
+    if (count <= 16) return 2;
+    if (count <= 24) return 4;
+    return 6;
+  }
+
   // Renders a simple bar chart. data = [{label, value}], target = optional reference line.
   function renderBarChart(svg, data, { target = null, color = 'var(--accent)', unit = '' } = {}) {
     clearSvg(svg);
@@ -26,8 +35,9 @@ const Charts = (() => {
     const W = 320, H = 140;
     const padBottom = 20, padTop = 10;
     const maxVal = Math.max(target || 0, ...data.map((d) => d.value), 1) * 1.15;
-    const barGap = 6;
-    const barWidth = (W - barGap * (data.length + 1)) / data.length;
+    const barGap = Math.max(1.5, 6 - data.length * 0.15);
+    const barWidth = Math.max(1, (W - barGap * (data.length + 1)) / data.length);
+    const step = labelStep(data.length);
 
     if (target) {
       const y = padTop + (H - padTop - padBottom) * (1 - target / maxVal);
@@ -43,17 +53,20 @@ const Charts = (() => {
       const barH = Math.max(2, (H - padTop - padBottom) * (d.value / maxVal));
       const y = H - padBottom - barH;
       const rect = makeEl('rect', {
-        x, y, width: barWidth, height: barH, rx: Math.min(6, barWidth / 3),
+        x, y, width: barWidth, height: barH, rx: Math.min(5, barWidth / 3),
         fill: target && d.value > target ? 'var(--protein)' : color
       });
       svg.appendChild(rect);
 
-      const label = makeEl('text', {
-        x: x + barWidth / 2, y: H - 6, 'text-anchor': 'middle',
-        fill: 'var(--text-3)', 'font-size': '9', 'font-family': 'var(--f)'
-      });
-      label.textContent = d.label;
-      svg.appendChild(label);
+      const isEdge = i === 0 || i === data.length - 1;
+      if (i % step === 0 || isEdge) {
+        const label = makeEl('text', {
+          x: x + barWidth / 2, y: H - 6, 'text-anchor': 'middle',
+          fill: 'var(--text-3)', 'font-size': '9', 'font-family': 'var(--f)'
+        });
+        label.textContent = d.label;
+        svg.appendChild(label);
+      }
     });
   }
 
@@ -68,9 +81,10 @@ const Charts = (() => {
     }
     const W = 320, H = 140, padBottom = 20, padTop = 10;
     const maxVal = Math.max(...data.map((d) => d.protein + d.fat + d.carbs), 1) * 1.1;
-    const barGap = 6;
-    const barWidth = (W - barGap * (data.length + 1)) / data.length;
+    const barGap = Math.max(1.5, 6 - data.length * 0.15);
+    const barWidth = Math.max(1, (W - barGap * (data.length + 1)) / data.length);
     const colors = { protein: 'var(--protein)', fat: 'var(--fats)', carbs: 'var(--carbs)' };
+    const step = labelStep(data.length);
 
     data.forEach((d, i) => {
       const x = barGap + i * (barWidth + barGap);
@@ -86,12 +100,15 @@ const Charts = (() => {
         svg.appendChild(rect);
       });
 
-      const label = makeEl('text', {
-        x: x + barWidth / 2, y: H - 6, 'text-anchor': 'middle',
-        fill: 'var(--text-3)', 'font-size': '9', 'font-family': 'var(--f)'
-      });
-      label.textContent = d.label;
-      svg.appendChild(label);
+      const isEdge = i === 0 || i === data.length - 1;
+      if (i % step === 0 || isEdge) {
+        const label = makeEl('text', {
+          x: x + barWidth / 2, y: H - 6, 'text-anchor': 'middle',
+          fill: 'var(--text-3)', 'font-size': '9', 'font-family': 'var(--f)'
+        });
+        label.textContent = d.label;
+        svg.appendChild(label);
+      }
     });
   }
 

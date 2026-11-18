@@ -13,7 +13,7 @@ const Diary = (() => {
   let previewDraft = null;       // { title, ingredients, clarificationQuestion }
   let editingMealId = null;
 
-  const RING_CIRCUMFERENCE = 2 * Math.PI * 70; // r=70 per index.html svg
+  const RING_CIRCUMFERENCE = Math.PI * 100; // half-circle arc length, r=100 per index.html svg
 
   // ---------- Rendering ----------
   function renderDay() {
@@ -215,12 +215,12 @@ const Diary = (() => {
       let result;
       if (pendingSource === 'photo') {
         result = await Api.analyzePhoto({
-          apiKey: settings.apiKey, model: settings.modelPhoto,
+          apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelPhoto,
           imageDataUrl: pendingPhotoFull, text
         });
       } else {
         result = await Api.analyzeText({
-          apiKey: settings.apiKey, model: settings.modelText, text
+          apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text
         });
       }
       Utils.closeModal('modal-loading');
@@ -322,12 +322,12 @@ const Diary = (() => {
       let result;
       if (pendingSource === 'photo') {
         result = await Api.analyzePhoto({
-          apiKey: settings.apiKey, model: settings.modelPhoto,
+          apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelPhoto,
           imageDataUrl: pendingPhotoFull, text, clarificationAnswer: answer
         });
       } else {
         result = await Api.analyzeText({
-          apiKey: settings.apiKey, model: settings.modelText, text, clarificationAnswer: answer
+          apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text, clarificationAnswer: answer
         });
       }
       Utils.closeModal('modal-loading');
@@ -422,17 +422,38 @@ const Diary = (() => {
   function renderEditIngredients() {
     const list = el('edit-meal-ingredients');
     list.innerHTML = editDraftIngredients.map((ing) => `
-      <div class="ingredient-row" data-ing-id="${ing.id}">
-        <input class="ingredient-name" value="${escapeHtml(ing.name)}" data-field="name">
-        <input class="ingredient-weight" type="number" value="${round(ing.weight)}" data-field="weight">
-        <span class="ingredient-weight-unit">г</span>
-        <span class="ingredient-kcal">${round(ing.kcal)} ккал</span>
-        <button class="ingredient-del" data-del="${ing.id}">&times;</button>
+      <div class="ingredient-row-edit" data-ing-id="${ing.id}">
+        <div class="ingredient-row">
+          <input class="ingredient-name" value="${escapeHtml(ing.name)}" data-field="name">
+          <input class="ingredient-weight" type="number" value="${round(ing.weight)}" data-field="weight">
+          <span class="ingredient-weight-unit">г</span>
+          <span class="ingredient-kcal" data-field-kcal>${round(ing.kcal)} ккал</span>
+          <button class="ingredient-del" data-del="${ing.id}">&times;</button>
+        </div>
+        <div class="ingredient-macro-row">
+          <label class="ingredient-macro-field">
+            <span>Б</span>
+            <input type="number" step="0.1" value="${round(ing.protein, 1)}" data-field="protein">
+          </label>
+          <label class="ingredient-macro-field">
+            <span>Ж</span>
+            <input type="number" step="0.1" value="${round(ing.fat, 1)}" data-field="fat">
+          </label>
+          <label class="ingredient-macro-field">
+            <span>У</span>
+            <input type="number" step="0.1" value="${round(ing.carbs, 1)}" data-field="carbs">
+          </label>
+          <label class="ingredient-macro-field">
+            <span>Ккал</span>
+            <input type="number" value="${round(ing.kcal)}" data-field="kcal">
+          </label>
+        </div>
       </div>
     `).join('');
-    $all('.ingredient-row', list).forEach((row) => {
+    $all('.ingredient-row-edit', list).forEach((row) => {
       const id = row.dataset.ingId;
       const ing = editDraftIngredients.find((i) => i.id === id);
+      const kcalLabel = $('[data-field-kcal]', row);
       $('[data-field="name"]', row).addEventListener('input', (e) => { ing.name = e.target.value; });
       $('[data-field="weight"]', row).addEventListener('input', (e) => {
         const newWeight = Number(e.target.value) || 0;
@@ -442,8 +463,29 @@ const Diary = (() => {
         ing.fat = round(ing.fat * ratio, 1);
         ing.carbs = round(ing.carbs * ratio, 1);
         ing.weight = newWeight;
+        kcalLabel.textContent = `${round(ing.kcal)} ккал`;
+        $('[data-field="kcal"]', row).value = round(ing.kcal);
+        $('[data-field="protein"]', row).value = round(ing.protein, 1);
+        $('[data-field="fat"]', row).value = round(ing.fat, 1);
+        $('[data-field="carbs"]', row).value = round(ing.carbs, 1);
         renderEditTotals();
-        $('.ingredient-kcal', row).textContent = `${round(ing.kcal)} ккал`;
+      });
+      $('[data-field="protein"]', row).addEventListener('input', (e) => {
+        ing.protein = Number(e.target.value) || 0;
+        renderEditTotals();
+      });
+      $('[data-field="fat"]', row).addEventListener('input', (e) => {
+        ing.fat = Number(e.target.value) || 0;
+        renderEditTotals();
+      });
+      $('[data-field="carbs"]', row).addEventListener('input', (e) => {
+        ing.carbs = Number(e.target.value) || 0;
+        renderEditTotals();
+      });
+      $('[data-field="kcal"]', row).addEventListener('input', (e) => {
+        ing.kcal = Number(e.target.value) || 0;
+        kcalLabel.textContent = `${round(ing.kcal)} ккал`;
+        renderEditTotals();
       });
     });
     $all('[data-del]', list).forEach((btn) => {
@@ -472,7 +514,7 @@ const Diary = (() => {
     Utils.openModal('modal-loading');
     const settings = Storage.getSettings();
     try {
-      const result = await Api.analyzeText({ apiKey: settings.apiKey, model: settings.modelText, text });
+      const result = await Api.analyzeText({ apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text });
       const newIngredients = (result.ingredients || []).map((ing) => ({
         id: uid('ing'),
         name: ing.name || 'Ингредиент',

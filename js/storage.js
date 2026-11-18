@@ -46,6 +46,7 @@ const Storage = (() => {
   const DEFAULT_SETTINGS = {
     theme: 'light',
     apiKey: '',
+    apiBaseUrl: 'https://rurout.online/v1',
     modelText: 'gpt-6-luna',
     modelPhoto: 'gemini-2.5-flash',
     targets: { kcal: 2000, protein: 120, fat: 70, carbs: 230 }

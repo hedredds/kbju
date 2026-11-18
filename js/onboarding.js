@@ -53,8 +53,10 @@ const Onboarding = (() => {
   }
 
   function goTo(index) {
-    stepIndex = Utils.clamp(index, 0, STEPS.length - 1);
-    renderCurrentStep();
+    const target = Utils.clamp(index, 0, STEPS.length - 1);
+    const direction = target >= stepIndex ? 'forward' : 'back';
+    stepIndex = target;
+    renderCurrentStep(direction);
     updateProgress();
   }
 
@@ -103,17 +105,18 @@ const Onboarding = (() => {
       targets: calc.targets
     });
     Storage.addWeight(Utils.todayKey(), profile.weightKg);
+    Storage.setPolicyAccepted(!!state.consent);
     Storage.setOnboarded(true);
 
     if (onFinishCb) onFinishCb(profile, calc);
   }
 
-  function renderCurrentStep() {
+  function renderCurrentStep(direction = 'forward') {
     const viewport = el('ob-viewport');
     if (!viewport) return;
     viewport.innerHTML = '';
     const stepEl = document.createElement('div');
-    stepEl.className = 'ob-step';
+    stepEl.className = `ob-step ob-step-${direction}`;
     viewport.appendChild(stepEl);
     STEPS[stepIndex].render(stepEl, state, { next, back, goTo, isFirst: stepIndex === 0, isLast: stepIndex === STEPS.length - 1 });
     viewport.scrollTop = 0;

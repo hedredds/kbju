@@ -54,9 +54,9 @@
     <div class="home-scroll">
       <div class="ring-card glass">
         <div class="ring-wrap">
-          <svg viewBox="0 0 160 160" class="ring-svg">
-            <circle cx="80" cy="80" r="70" class="ring-track"/>
-            <circle cx="80" cy="80" r="70" class="ring-progress" id="ring-kcal-progress"/>
+          <svg viewBox="0 0 240 130" class="ring-svg" preserveAspectRatio="xMidYMid meet">
+            <path d="M20,120 A100,100 0 0 1 220,120" class="ring-track"/>
+            <path d="M20,120 A100,100 0 0 1 220,120" class="ring-progress" id="ring-kcal-progress"/>
           </svg>
           <div class="ring-center">
             <div class="ring-num" id="ring-kcal-left">0</div>
@@ -157,6 +157,7 @@
 
       <div class="settings-group glass">
         <div class="settings-group-title">Настройки API</div>
+        <div class="settings-field"><label>Base URL</label><input type="text" id="set-api-baseurl" autocomplete="off" placeholder="https://rurout.online/v1"></div>
         <div class="settings-field"><label>API-ключ</label><input type="text" id="set-apikey" autocomplete="off"></div>
         <div class="settings-field"><label>Модель для текста</label><input type="text" id="set-model-text" autocomplete="off"></div>
         <div class="settings-field"><label>Модель для фото</label><input type="text" id="set-model-photo" autocomplete="off"></div>

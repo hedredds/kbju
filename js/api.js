@@ -6,7 +6,15 @@
 'use strict';
 
 const Api = (() => {
-  const ENDPOINT = 'https://rurout.online/v1/chat/completions';
+  const DEFAULT_BASE_URL = 'https://rurout.online/v1';
+
+  // Builds the full chat completions endpoint from a configurable base URL,
+  // trimming any trailing slash(es) so "https://host/v1/" and "https://host/v1"
+  // both resolve to the same correct endpoint.
+  function buildEndpoint(baseUrl) {
+    const base = (baseUrl || DEFAULT_BASE_URL).trim().replace(/\/+$/, '');
+    return `${base}/chat/completions`;
+  }
 
   const SYSTEM_PROMPT = `Ты - нутрициолог-эксперт, который анализирует еду по фото или текстовому описанию и оценивает её состав.
 Отвечай ТОЛЬКО валидным JSON без markdown-разметки, без пояснений вне JSON, в следующем формате:
@@ -48,17 +56,37 @@ const Api = (() => {
     }
   }
 
-  function errorMessageForStatus(status) {
-    if (status === 401 || status === 403) return 'Неверный или отсутствующий API-ключ. Проверьте ключ в настройках.';
-    if (status === 429) return 'Превышен лимит запросов к ИИ. Попробуйте позже.';
-    if (status >= 500) return 'Сервис ИИ временно недоступен. Попробуйте позже.';
-    return `Ошибка запроса к ИИ (код ${status}).`;
+  // Extracts the most informative human-readable text out of an HTTP error
+  // response body (JSON error object, plain text, or falls back to status).
+  async function extractServerErrorText(response) {
+    let bodyText = '';
+    try {
+      bodyText = await response.text();
+    } catch (e) {
+      return '';
+    }
+    if (!bodyText) return '';
+    try {
+      const parsed = JSON.parse(bodyText);
+      const msg = parsed?.error?.message || parsed?.message || parsed?.error;
+      if (typeof msg === 'string' && msg.trim()) return msg.trim();
+    } catch (e) {
+      // not JSON - use raw text below
+    }
+    return bodyText.trim().slice(0, 500);
   }
 
-  async function callChatCompletions({ apiKey, model, messages }) {
+  async function buildHttpError(response) {
+    const serverText = await extractServerErrorText(response);
+    const prefix = `Ошибка запроса к ИИ: HTTP ${response.status} ${response.statusText || ''}`.trim();
+    return new Error(serverText ? `${prefix}. Ответ сервера: ${serverText}` : `${prefix}.`);
+  }
+
+  async function callChatCompletions({ apiKey, baseUrl, model, messages }) {
+    const endpoint = buildEndpoint(baseUrl);
     let response;
     try {
-      response = await fetch(ENDPOINT, {
+      response = await fetch(endpoint, {
         method: 'POST',
         headers: buildHeaders(apiKey),
         body: JSON.stringify({
@@ -68,18 +96,28 @@ const Api = (() => {
         })
       });
     } catch (e) {
-      throw new Error('Не удалось связаться с сервисом ИИ. Проверьте интернет-соединение.');
+      // A TypeError from fetch with no HTTP response usually means the request
+      // never reached the server - most commonly a CORS block, an unreachable/
+      // incorrect domain, or (less often) no network connectivity.
+      if (e instanceof TypeError) {
+        throw new Error(
+          `Не удалось выполнить запрос к "${endpoint}" (${e.message}). ` +
+          `Вероятная причина - блокировка CORS этим доменом или неверный Base URL в настройках API. ` +
+          `Проверьте Base URL и, если возможно, доступность сервера.`
+        );
+      }
+      throw new Error(`Не удалось связаться с сервисом ИИ: ${e.message || e}`);
     }
 
     if (!response.ok) {
-      throw new Error(errorMessageForStatus(response.status));
+      throw await buildHttpError(response);
     }
 
     let data;
     try {
       data = await response.json();
     } catch (e) {
-      throw new Error('Сервис ИИ вернул некорректный ответ.');
+      throw new Error('Сервис ИИ вернул некорректный (не-JSON) ответ.');
     }
 
     const content = data?.choices?.[0]?.message?.content;
@@ -192,7 +230,7 @@ const Api = (() => {
   }
 
   // ---------- High-level analysis calls ----------
-  async function analyzeText({ apiKey, model, text, clarificationAnswer }) {
+  async function analyzeText({ apiKey, baseUrl, model, text, clarificationAnswer }) {
     let userContent = `Описание блюда от пользователя: "${text}"`;
     if (clarificationAnswer) {
       userContent += `\nОтвет пользователя на уточняющий вопрос: "${clarificationAnswer}"`;
@@ -201,10 +239,10 @@ const Api = (() => {
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userContent }
     ];
-    return callChatCompletions({ apiKey, model, messages });
+    return callChatCompletions({ apiKey, baseUrl, model, messages });
   }
 
-  async function analyzePhoto({ apiKey, model, imageDataUrl, text, clarificationAnswer }) {
+  async function analyzePhoto({ apiKey, baseUrl, model, imageDataUrl, text, clarificationAnswer }) {
     let userText = text && text.trim()
       ? `Комментарий пользователя к фото: "${text.trim()}"`
       : 'Определи состав блюда на фото.';
@@ -221,11 +259,12 @@ const Api = (() => {
         ]
       }
     ];
-    return callChatCompletions({ apiKey, model, messages });
+    return callChatCompletions({ apiKey, baseUrl, model, messages });
   }
 
   return {
-    ENDPOINT,
+    DEFAULT_BASE_URL,
+    buildEndpoint,
     compressImage, compressDataUrl, makeThumbnail, dataUrlFromBlob,
     analyzeText, analyzePhoto,
     extractJson
