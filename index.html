@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<title>KBJU - Счетчик калорий</title>
+<meta name="description" content="KBJU - локальный счетчик калорий и КБЖУ с распознаванием еды по фото через ИИ.">
+<meta name="theme-color" content="#F5F5F5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="KBJU">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+<!-- ============ ONBOARDING ============ -->
+<section id="onboarding" class="ob hidden">
+  <div class="ob-progress"><div class="ob-progress-bar" id="ob-progress-bar"></div></div>
+  <div class="ob-viewport" id="ob-viewport"></div>
+</section>
+
+<!-- ============ MODAL: POLICY ============ -->
+<div id="modal-policy" class="modal-overlay hidden">
+  <div class="modal-sheet modal-sheet-lg">
+    <div class="modal-head">
+      <h3 id="policy-title">Документ</h3>
+      <button class="icon-btn" data-close="modal-policy" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="modal-body" id="policy-body"></div>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app" class="app hidden">
+
+  <!-- ---------- PAGE: HOME (DIARY) ---------- -->
+  <section id="page-home" class="page active">
+    <header class="top-bar">
+      <button class="day-nav-btn" id="day-prev" aria-label="Предыдущий день">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="day-label" id="day-label">Сегодня</div>
+      <button class="day-nav-btn" id="day-next" aria-label="Следующий день">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </header>
+
+    <div class="home-scroll">
+      <div class="ring-card glass">
+        <div class="ring-wrap">
+          <svg viewBox="0 0 160 160" class="ring-svg">
+            <circle cx="80" cy="80" r="70" class="ring-track"/>
+            <circle cx="80" cy="80" r="70" class="ring-progress" id="ring-kcal-progress"/>
+          </svg>
+          <div class="ring-center">
+            <div class="ring-num" id="ring-kcal-left">0</div>
+            <div class="ring-sub">ккал осталось</div>
+            <div class="ring-sub2" id="ring-kcal-total">из 0</div>
+          </div>
+        </div>
+        <div class="macro-row">
+          <div class="macro-item">
+            <div class="macro-bar"><div class="macro-bar-fill macro-protein" id="bar-protein"></div></div>
+            <div class="macro-text"><span id="val-protein">0</span>/<span id="target-protein">0</span> г</div>
+            <div class="macro-label">Белки</div>
+          </div>
+          <div class="macro-item">
+            <div class="macro-bar"><div class="macro-bar-fill macro-fat" id="bar-fat"></div></div>
+            <div class="macro-text"><span id="val-fat">0</span>/<span id="target-fat">0</span> г</div>
+            <div class="macro-label">Жиры</div>
+          </div>
+          <div class="macro-item">
+            <div class="macro-bar"><div class="macro-bar-fill macro-carbs" id="bar-carbs"></div></div>
+            <div class="macro-text"><span id="val-carbs">0</span>/<span id="target-carbs">0</span> г</div>
+            <div class="macro-label">Углеводы</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="weight-quick-btn glass" id="btn-quick-weight">
+        <svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        <span id="quick-weight-label">Обновить вес</span>
+        <span class="chev">&rsaquo;</span>
+      </button>
+
+      <div class="meals-head">
+        <span>Приемы пищи</span>
+      </div>
+      <div id="meals-list" class="meals-list"></div>
+      <div id="meals-empty" class="meals-empty hidden">Пока нет записей за этот день. Нажмите "+" чтобы добавить прием пищи.</div>
+      <div class="bottom-spacer"></div>
+    </div>
+  </section>
+
+  <!-- ---------- PAGE: STATS ---------- -->
+  <section id="page-stats" class="page">
+    <header class="top-bar"><div class="day-label">Статистика</div></header>
+    <div class="home-scroll">
+      <div class="seg-switch glass" id="chart-range-switch">
+        <button class="seg-btn active" data-range="7">7 дней</button>
+        <button class="seg-btn" data-range="30">30 дней</button>
+      </div>
+
+      <div class="stat-card glass">
+        <div class="stat-card-title">Калории</div>
+        <svg id="chart-kcal" class="chart-svg" viewBox="0 0 320 140" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="stat-card glass">
+        <div class="stat-card-title">Баланс БЖУ</div>
+        <svg id="chart-macro" class="chart-svg" viewBox="0 0 320 140" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="stat-card glass">
+        <div class="stat-card-title-row">
+          <div class="stat-card-title">Вес</div>
+          <button class="small-btn" id="btn-add-weight">+ Замер</button>
+        </div>
+        <svg id="chart-weight" class="chart-svg" viewBox="0 0 320 140" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="meals-head"><span>История дней</span></div>
+      <div id="history-list" class="history-list"></div>
+      <div class="bottom-spacer"></div>
+    </div>
+  </section>
+  <!-- ---------- PAGE: SETTINGS ---------- -->
+  <section id="page-settings" class="page">
+    <header class="top-bar"><div class="day-label">Настройки</div></header>
+    <div class="home-scroll">
+
+      <div class="settings-group glass">
+        <div class="settings-group-title">Внешний вид</div>
+        <div class="settings-row">
+          <span>Тема</span>
+          <div class="seg-switch seg-switch-inline" id="theme-switch">
+            <button class="seg-btn" data-theme="light">Светлая</button>
+            <button class="seg-btn" data-theme="dark">Темная</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-group glass">
+        <div class="settings-group-title">Дневные цели</div>
+        <div class="settings-field"><label>Калории</label><input type="number" id="set-kcal" inputmode="numeric"></div>
+        <div class="settings-field"><label>Белки, г</label><input type="number" id="set-protein" inputmode="numeric"></div>
+        <div class="settings-field"><label>Жиры, г</label><input type="number" id="set-fat" inputmode="numeric"></div>
+        <div class="settings-field"><label>Углеводы, г</label><input type="number" id="set-carbs" inputmode="numeric"></div>
+        <button class="btn-primary" id="btn-save-targets">Сохранить цели</button>
+      </div>
+
+      <div class="settings-group glass">
+        <div class="settings-group-title">Настройки API</div>
+        <div class="settings-field"><label>API-ключ</label><input type="text" id="set-apikey" autocomplete="off"></div>
+        <div class="settings-field"><label>Модель для текста</label><input type="text" id="set-model-text" autocomplete="off"></div>
+        <div class="settings-field"><label>Модель для фото</label><input type="text" id="set-model-photo" autocomplete="off"></div>
+        <button class="btn-primary" id="btn-save-api">Сохранить API</button>
+      </div>
+
+      <div class="settings-group glass">
+        <div class="settings-group-title">Данные</div>
+        <button class="btn-secondary full" id="btn-redo-onboarding">Пройти анкету заново</button>
+        <button class="btn-secondary full" id="btn-export">Экспорт данных (JSON)</button>
+        <button class="btn-danger full" id="btn-reset-all">Удалить все данные</button>
+      </div>
+
+      <div class="settings-group glass">
+        <div class="settings-group-title">О приложении</div>
+        <div class="settings-row"><span>Версия</span><span class="muted">1.0.0</span></div>
+        <button class="link-btn" id="link-policy">Политика конфиденциальности</button>
+        <button class="link-btn" id="link-terms">Пользовательское соглашение</button>
+      </div>
+
+      <div class="bottom-spacer"></div>
+    </div>
+  </section>
+  <!-- ---------- BOTTOM NAV ---------- -->
+  <nav class="tab-bar glass">
+    <button class="tab-btn active" data-page="page-home">
+      <svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1v-8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>Дневник</span>
+    </button>
+    <button class="tab-btn" data-page="page-stats">
+      <svg width="22" height="22" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Статистика</span>
+    </button>
+    <button class="tab-btn" data-page="page-settings">
+      <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>Настройки</span>
+    </button>
+  </nav>
+
+  <!-- FAB -->
+  <button class="fab" id="fab-add" aria-label="Добавить прием пищи">
+    <svg width="26" height="26" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+  </button>
+  <div class="fab-overlay hidden" id="fab-overlay">
+    <div class="fab-menu">
+      <button class="fab-menu-item" id="fab-photo"><span class="fab-menu-icon">&#128247;</span><span>По фото</span></button>
+      <button class="fab-menu-item" id="fab-text"><span class="fab-menu-icon">&#9999;</span><span>По тексту</span></button>
+      <button class="fab-menu-item" id="fab-manual"><span class="fab-menu-icon">&#128221;</span><span>Вручную</span></button>
+    </div>
+  </div>
+</div>
+<!-- ============ MODAL: CAMERA ============ -->
+<div id="modal-camera" class="modal-overlay hidden">
+  <div class="camera-view">
+    <video id="camera-video" autoplay playsinline muted></video>
+    <canvas id="camera-canvas" class="hidden"></canvas>
+    <div class="camera-top">
+      <button class="icon-btn-round" id="camera-close" aria-label="Закрыть">&times;</button>
+      <button class="icon-btn-round" id="camera-flash" aria-label="Фонарик">&#9889;</button>
+    </div>
+    <div class="camera-bottom">
+      <button class="camera-shutter" id="camera-shutter" aria-label="Снять фото"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: PHOTO/TEXT COMMENT ============ -->
+<div id="modal-comment" class="modal-overlay hidden">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3 id="comment-title">Описание</h3>
+      <button class="icon-btn" data-close="modal-comment">&times;</button>
+    </div>
+    <div class="modal-body">
+      <img id="comment-photo-preview" class="comment-photo-preview hidden" alt="Фото еды">
+      <textarea id="comment-text" class="textarea" placeholder="Например: куриная грудка на гриле с рисом и овощами, порция около 350 г" rows="4"></textarea>
+      <button class="btn-primary full" id="btn-comment-calc">Рассчитать</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: MANUAL ENTRY ============ -->
+<div id="modal-manual" class="modal-overlay hidden">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3>Вручную</h3>
+      <button class="icon-btn" data-close="modal-manual">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-field"><label>Название</label><input type="text" id="manual-name" placeholder="Название блюда"></div>
+      <div class="settings-field"><label>Вес, г</label><input type="number" id="manual-weight" inputmode="numeric"></div>
+      <div class="settings-field"><label>Калории</label><input type="number" id="manual-kcal" inputmode="numeric"></div>
+      <div class="settings-field"><label>Белки, г</label><input type="number" id="manual-protein" inputmode="numeric"></div>
+      <div class="settings-field"><label>Жиры, г</label><input type="number" id="manual-fat" inputmode="numeric"></div>
+      <div class="settings-field"><label>Углеводы, г</label><input type="number" id="manual-carbs" inputmode="numeric"></div>
+      <button class="btn-primary full" id="btn-manual-save">Сохранить в дневник</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: AI LOADING ============ -->
+<div id="modal-loading" class="modal-overlay hidden">
+  <div class="loading-box glass">
+    <div class="spinner"></div>
+    <div class="loading-text">Анализируем...</div>
+  </div>
+</div>
+
+<!-- ============ MODAL: AI PREVIEW ============ -->
+<div id="modal-preview" class="modal-overlay hidden">
+  <div class="modal-sheet modal-sheet-lg">
+    <div class="modal-head">
+      <h3>Проверьте результат</h3>
+      <button class="icon-btn" data-close="modal-preview">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-field"><label>Название блюда</label><input type="text" id="preview-title"></div>
+      <div id="preview-ingredients" class="ingredients-list"></div>
+      <div id="preview-clarify-box" class="clarify-box hidden">
+        <div class="clarify-q" id="preview-clarify-q"></div>
+        <textarea id="preview-clarify-answer" class="textarea" rows="2" placeholder="Ваш ответ..."></textarea>
+        <button class="btn-secondary full" id="btn-preview-clarify-recalc">Пересчитать с ответом</button>
+      </div>
+      <div class="preview-total glass">
+        <div class="preview-total-row"><span>Итого</span><span id="preview-total-kcal">0 ккал</span></div>
+        <div class="preview-total-sub">
+          <span>Б: <b id="preview-total-protein">0</b> г</span>
+          <span>Ж: <b id="preview-total-fat">0</b> г</span>
+          <span>У: <b id="preview-total-carbs">0</b> г</span>
+        </div>
+      </div>
+      <button class="btn-primary full" id="btn-preview-save">Сохранить в дневник</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: EDIT MEAL ============ -->
+<div id="modal-edit-meal" class="modal-overlay hidden">
+  <div class="modal-sheet modal-sheet-lg">
+    <div class="modal-head">
+      <h3>Редактирование</h3>
+      <button class="icon-btn" data-close="modal-edit-meal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-field"><label>Название</label><input type="text" id="edit-meal-name"></div>
+      <div id="edit-meal-ingredients" class="ingredients-list"></div>
+      <div class="preview-total glass">
+        <div class="preview-total-row"><span>Итого</span><span id="edit-meal-total-kcal">0 ккал</span></div>
+        <div class="preview-total-sub">
+          <span>Б: <b id="edit-meal-total-protein">0</b> г</span>
+          <span>Ж: <b id="edit-meal-total-fat">0</b> г</span>
+          <span>У: <b id="edit-meal-total-carbs">0</b> г</span>
+        </div>
+      </div>
+      <div class="settings-field"><label>Дополнить через ИИ</label>
+        <div class="row-gap">
+          <input type="text" id="edit-meal-ai-text" placeholder="Например: добавь 50 г сыра">
+          <button class="btn-secondary" id="btn-edit-meal-ai">Отправить</button>
+        </div>
+      </div>
+      <button class="btn-danger full" id="btn-delete-meal">Удалить прием пищи</button>
+      <button class="btn-primary full" id="btn-save-edit-meal">Сохранить изменения</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: ADD WEIGHT ============ -->
+<div id="modal-weight" class="modal-overlay hidden">
+  <div class="modal-sheet">
+    <div class="modal-head">
+      <h3>Текущий вес</h3>
+      <button class="icon-btn" data-close="modal-weight">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-field"><label id="weight-unit-label">Вес, кг</label><input type="number" id="weight-input" inputmode="decimal" step="0.1"></div>
+      <button class="btn-primary full" id="btn-weight-save">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: DAY HISTORY DETAIL ============ -->
+<div id="modal-day-detail" class="modal-overlay hidden">
+  <div class="modal-sheet modal-sheet-lg">
+    <div class="modal-head">
+      <h3 id="day-detail-title">День</h3>
+      <button class="icon-btn" data-close="modal-day-detail">&times;</button>
+    </div>
+    <div class="modal-body" id="day-detail-body"></div>
+  </div>
+</div>
+
+<script src="js/storage.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/nutrition.js"></script>
+<script src="js/texts.js"></script>
+<script src="js/api.js"></script>
+<script src="js/camera.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/onboarding.js"></script>
+<script src="js/diary.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
+
+
+
+
