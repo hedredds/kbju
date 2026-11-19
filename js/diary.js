@@ -48,6 +48,49 @@ const Diary = (() => {
     Utils.closeModal('modal-loading');
   }
 
+  function withBaseMacros(ing) {
+    const weight = Number(ing.weight) || 0;
+    const kcal = Number(ing.kcal) || 0;
+    const protein = Number(ing.protein) || 0;
+    const fat = Number(ing.fat) || 0;
+    const carbs = Number(ing.carbs) || 0;
+    return {
+      ...ing,
+      weight,
+      kcal,
+      protein,
+      fat,
+      carbs,
+      baseWeight: weight,
+      baseKcal: kcal,
+      baseProtein: protein,
+      baseFat: fat,
+      baseCarbs: carbs
+    };
+  }
+
+  function stripBaseMacros(list) {
+    return list.map((ing) => ({
+      id: ing.id,
+      name: ing.name,
+      weight: ing.weight,
+      kcal: ing.kcal,
+      protein: ing.protein,
+      fat: ing.fat,
+      carbs: ing.carbs
+    }));
+  }
+
+  function syncBaseMacros(ing) {
+    if (ing.weight > 0) {
+      ing.baseWeight = ing.weight;
+      ing.baseKcal = ing.kcal;
+      ing.baseProtein = ing.protein;
+      ing.baseFat = ing.fat;
+      ing.baseCarbs = ing.carbs;
+    }
+  }
+
   // ---------- Rendering ----------
   function renderDay() {
     el('day-label').textContent = Utils.formatDayLabel(currentDate);
@@ -69,7 +112,7 @@ const Diary = (() => {
     const ringProgress = el('ring-kcal-progress');
     ringProgress.style.strokeDasharray = `${RING_CIRCUMFERENCE}`;
     ringProgress.style.strokeDashoffset = `${offset}`;
-    ringProgress.style.stroke = totals.kcal > targets.kcal ? '#D93025' : 'var(--text)';
+    ringProgress.style.stroke = 'var(--text)';
 
     renderMacroBar('protein', totals.protein, targets.protein);
     renderMacroBar('fat', totals.fat, targets.fat);
@@ -154,7 +197,7 @@ const Diary = (() => {
     const valEl = el(`val-${key}`);
     const isOver = value > target;
     bar.style.width = `${ratio * 100}%`;
-    bar.style.background = isOver ? '#D93025' : '';
+    bar.style.background = '';
     valEl.textContent = round(value);
     valEl.style.color = isOver ? '#D93025' : '';
     el(`target-${key}`).textContent = round(target);
@@ -339,7 +382,7 @@ const Diary = (() => {
   function openPreviewModal(result) {
     previewDraft = {
       title: result.title || 'Блюдо',
-      ingredients: (result.ingredients || []).map((ing) => ({
+      ingredients: (result.ingredients || []).map((ing) => withBaseMacros({
         id: uid('ing'),
         name: ing.name || 'Ингредиент',
         weight: Number(ing.weight_g) || 0,
@@ -378,11 +421,13 @@ const Diary = (() => {
 
       $('[data-field="weight"]', row).addEventListener('input', (e) => {
         const newWeight = Number(e.target.value) || 0;
-        const ratio = ing.weight > 0 ? newWeight / ing.weight : 1;
-        ing.kcal = round(ing.kcal * ratio);
-        ing.protein = round(ing.protein * ratio, 1);
-        ing.fat = round(ing.fat * ratio, 1);
-        ing.carbs = round(ing.carbs * ratio, 1);
+        if (ing.baseWeight > 0) {
+          const ratio = newWeight / ing.baseWeight;
+          ing.kcal = round(ing.baseKcal * ratio);
+          ing.protein = round(ing.baseProtein * ratio, 1);
+          ing.fat = round(ing.baseFat * ratio, 1);
+          ing.carbs = round(ing.baseCarbs * ratio, 1);
+        }
         ing.weight = newWeight;
         $('.ingredient-kcal', row).textContent = `${round(ing.kcal)} ккал`;
       });
@@ -451,7 +496,7 @@ const Diary = (() => {
     const meal = {
       title,
       source: pendingSource,
-      ingredients: previewDraft.ingredients,
+      ingredients: stripBaseMacros(previewDraft.ingredients),
       kcal: round(totals.kcal),
       protein: round(totals.protein, 1),
       fat: round(totals.fat, 1),
@@ -508,8 +553,8 @@ const Diary = (() => {
     if (!meal) return;
     editingMealId = mealId;
     editDraftIngredients = (meal.ingredients && meal.ingredients.length)
-      ? meal.ingredients.map((i) => ({ ...i }))
-      : [{
+      ? meal.ingredients.map((i) => withBaseMacros(i))
+      : [withBaseMacros({
           id: uid('ing'),
           name: meal.title,
           weight: meal.weight || 0,
@@ -517,7 +562,7 @@ const Diary = (() => {
           protein: meal.protein,
           fat: meal.fat,
           carbs: meal.carbs
-        }];
+        })];
     el('edit-meal-name').value = meal.title;
     el('edit-meal-ai-text').value = '';
     renderEditIngredients();
@@ -568,11 +613,13 @@ const Diary = (() => {
 
       $('[data-field="weight"]', row).addEventListener('input', (e) => {
         const newWeight = Number(e.target.value) || 0;
-        const ratio = ing.weight > 0 ? newWeight / ing.weight : 1;
-        ing.kcal = round(ing.kcal * ratio);
-        ing.protein = round(ing.protein * ratio, 1);
-        ing.fat = round(ing.fat * ratio, 1);
-        ing.carbs = round(ing.carbs * ratio, 1);
+        if (ing.baseWeight > 0) {
+          const ratio = newWeight / ing.baseWeight;
+          ing.kcal = round(ing.baseKcal * ratio);
+          ing.protein = round(ing.baseProtein * ratio, 1);
+          ing.fat = round(ing.baseFat * ratio, 1);
+          ing.carbs = round(ing.baseCarbs * ratio, 1);
+        }
         ing.weight = newWeight;
         kcalLabel.textContent = `${round(ing.kcal)} ккал`;
         $('[data-field="kcal"]', row).value = round(ing.kcal);
@@ -584,22 +631,26 @@ const Diary = (() => {
 
       $('[data-field="protein"]', row).addEventListener('input', (e) => {
         ing.protein = Number(e.target.value) || 0;
+        syncBaseMacros(ing);
         renderEditTotals();
       });
 
       $('[data-field="fat"]', row).addEventListener('input', (e) => {
         ing.fat = Number(e.target.value) || 0;
+        syncBaseMacros(ing);
         renderEditTotals();
       });
 
       $('[data-field="carbs"]', row).addEventListener('input', (e) => {
         ing.carbs = Number(e.target.value) || 0;
+        syncBaseMacros(ing);
         renderEditTotals();
       });
 
       $('[data-field="kcal"]', row).addEventListener('input', (e) => {
         ing.kcal = Number(e.target.value) || 0;
         kcalLabel.textContent = `${round(ing.kcal)} ккал`;
+        syncBaseMacros(ing);
         renderEditTotals();
       });
     });
@@ -630,7 +681,7 @@ const Diary = (() => {
         model: settings.modelText,
         text
       });
-      const newIngredients = (result.ingredients || []).map((ing) => ({
+      const newIngredients = (result.ingredients || []).map((ing) => withBaseMacros({
         id: uid('ing'),
         name: ing.name || 'Ингредиент',
         weight: Number(ing.weight_g) || 0,
@@ -656,7 +707,7 @@ const Diary = (() => {
     const title = el('edit-meal-name').value.trim() || 'Блюдо';
     Storage.updateMeal(currentDate, editingMealId, {
       title,
-      ingredients: editDraftIngredients,
+      ingredients: stripBaseMacros(editDraftIngredients),
       kcal: round(totals.kcal),
       protein: round(totals.protein, 1),
       fat: round(totals.fat, 1),
