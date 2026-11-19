@@ -1,5 +1,5 @@
 // Service Worker for KBJU PWA - offline caching (app shell + static assets)
-const CACHE_VERSION = 'kbju-v1.1.1';
+const CACHE_VERSION = 'kbju-v1.1.2';
 const CACHE_NAME = CACHE_VERSION;
 
 const PRECACHE_URLS = [
