@@ -1,28 +1,21 @@
-/* diary.js - Home page (diary): ring progress, meal list, FAB flows
- * (photo/text/manual), AI preview with clarification, edit/delete meal.
- */
 'use strict';
 
 const Diary = (() => {
   const { el, $, $all, show, hide, escapeHtml, toast, round, uid } = Utils;
 
   let currentDate = Utils.todayKey();
-  let pendingPhotoFull = null;   // compressed data URL sent to API (max 640px)
-  let pendingPhotoThumb = null;  // small thumbnail for storage (~300px)
-  let pendingSource = 'text';    // 'photo' | 'text'
-  let previewDraft = null;       // { title, ingredients, clarificationQuestion }
+  let pendingPhotoFull = null;
+  let pendingPhotoThumb = null;
+  let pendingSource = 'text';
+  let previewDraft = null;
   let editingMealId = null;
 
-  const RING_CIRCUMFERENCE = Math.PI * 100; // half-circle arc length, r=100 per index.html svg
+  const RING_CIRCUMFERENCE = Math.PI * 100;
 
-  // ---------- AI loading modal: spinner + live stopwatch ----------
+  // ---------- AI loading modal ----------
   let loadingTimerId = null;
   let loadingStartedAt = 0;
 
-  // Honest live stopwatch - ticks up every second for as long as the request
-  // is actually in flight ("Анализируем... 1 с", "2 с", ...). It never
-  // freezes or lies about a fake remaining time; it is always reset in
-  // stopLoadingTimer(), which closeLoadingModal() calls from a finally block.
   function startLoadingTimer() {
     stopLoadingTimer();
     loadingStartedAt = Date.now();
@@ -45,9 +38,6 @@ const Diary = (() => {
     if (timerEl) timerEl.textContent = '';
   }
 
-  // Always pair with closeLoadingModal() in a finally block so the spinner
-  // and the timer never get stuck on screen, even if the request throws,
-  // times out, or returns malformed data.
   function openLoadingModal() {
     Utils.openModal('modal-loading');
     startLoadingTimer();
@@ -62,13 +52,16 @@ const Diary = (() => {
   function renderDay() {
     el('day-label').textContent = Utils.formatDayLabel(currentDate);
     renderWeekStrip();
+
     const day = Storage.getDay(currentDate);
     const settings = Storage.getSettings();
     const targets = settings.targets;
     const totals = Nutrition.sumMeals(day.meals);
 
-    const kcalLeft = Math.max(0, round(targets.kcal - totals.kcal));
-    el('ring-kcal-left').textContent = kcalLeft;
+    const kcalLeft = round(targets.kcal - totals.kcal);
+    const kcalLeftEl = el('ring-kcal-left');
+    kcalLeftEl.textContent = kcalLeft;
+    kcalLeftEl.style.color = kcalLeft < 0 ? '#D93025' : '';
     el('ring-kcal-total').textContent = `из ${round(targets.kcal)}`;
 
     const progressRatio = Utils.clamp(totals.kcal / (targets.kcal || 1), 0, 1);
@@ -76,11 +69,7 @@ const Diary = (() => {
     const ringProgress = el('ring-kcal-progress');
     ringProgress.style.strokeDasharray = `${RING_CIRCUMFERENCE}`;
     ringProgress.style.strokeDashoffset = `${offset}`;
-    if (totals.kcal > targets.kcal) {
-      ringProgress.style.stroke = 'var(--protein)';
-    } else {
-      ringProgress.style.stroke = 'var(--text)';
-    }
+    ringProgress.style.stroke = totals.kcal > targets.kcal ? '#D93025' : 'var(--text)';
 
     renderMacroBar('protein', totals.protein, targets.protein);
     renderMacroBar('fat', totals.fat, targets.fat);
@@ -90,7 +79,7 @@ const Diary = (() => {
     renderStreakBadge();
   }
 
-  // ---------- Week strip (Mon-Sun calendar replacing the prev/next day arrows) ----------
+  // ---------- Week strip ----------
   function renderWeekStrip() {
     const days = Utils.weekDays(currentDate);
     const today = Utils.todayKey();
@@ -111,6 +100,7 @@ const Diary = (() => {
         </button>
       `;
     }).join('');
+
     $all('.week-day', container).forEach((btn) => {
       btn.addEventListener('click', () => selectDate(btn.dataset.date));
     });
@@ -135,9 +125,6 @@ const Diary = (() => {
     if (badge) badge.classList.toggle('streak-active', (streak.count || 0) > 0);
   }
 
-  // Opens a small explanatory popup when the user taps the streak flame -
-  // the count itself is already visible on the badge, this just explains
-  // what it means and restates the current value.
   function onStreakClick() {
     const streak = Storage.getStreak();
     const count = streak.count || 0;
@@ -163,8 +150,13 @@ const Diary = (() => {
 
   function renderMacroBar(key, value, target) {
     const ratio = Utils.clamp(value / (target || 1), 0, 1);
-    el(`bar-${key}`).style.width = `${ratio * 100}%`;
-    el(`val-${key}`).textContent = round(value);
+    const bar = el(`bar-${key}`);
+    const valEl = el(`val-${key}`);
+    const isOver = value > target;
+    bar.style.width = `${ratio * 100}%`;
+    bar.style.background = isOver ? '#D93025' : '';
+    valEl.textContent = round(value);
+    valEl.style.color = isOver ? '#D93025' : '';
     el(`target-${key}`).textContent = round(target);
   }
 
@@ -199,24 +191,21 @@ const Diary = (() => {
         </div>
       </div>
     `).join('');
+
     $all('.meal-card', list).forEach((card) => {
       card.addEventListener('click', () => openEditMeal(card.dataset.mealId));
     });
   }
 
-  // ---------- Day navigation (kept for external callers, e.g. deep links) ----------
+  // ---------- Day navigation ----------
   function changeDay(delta) {
     currentDate = Utils.addDays(currentDate, delta);
     renderDay();
   }
 
   // ---------- FAB menu ----------
-  function openFabMenu() {
-    show('fab-overlay');
-  }
-  function closeFabMenu() {
-    hide('fab-overlay');
-  }
+  function openFabMenu() { show('fab-overlay'); }
+  function closeFabMenu() { hide('fab-overlay'); }
 
   // ---------- Photo flow ----------
   async function startPhotoFlow() {
@@ -257,8 +246,6 @@ const Diary = (() => {
     await Camera.toggleTorch();
   }
 
-  // Fallback file picker (used if camera API unsupported, or could be wired
-  // to an <input type="file" accept="image/*" capture="environment">).
   function openManualPhotoPicker() {
     const input = document.createElement('input');
     input.type = 'file';
@@ -288,7 +275,7 @@ const Diary = (() => {
     }
   }
 
-  // ---------- Comment modal (photo caption or text-only entry) ----------
+  // ---------- Comment modal ----------
   function openCommentModal() {
     const preview = el('comment-photo-preview');
     const title = el('comment-title');
@@ -326,12 +313,18 @@ const Diary = (() => {
       let result;
       if (pendingSource === 'photo') {
         result = await Api.analyzePhoto({
-          apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelPhoto,
-          imageDataUrl: pendingPhotoFull, text
+          apiKey: settings.apiKey,
+          baseUrl: settings.apiBaseUrl,
+          model: settings.modelPhoto,
+          imageDataUrl: pendingPhotoFull,
+          text
         });
       } else {
         result = await Api.analyzeText({
-          apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text
+          apiKey: settings.apiKey,
+          baseUrl: settings.apiBaseUrl,
+          model: settings.modelText,
+          text
         });
       }
       openPreviewModal(result);
@@ -374,10 +367,15 @@ const Diary = (() => {
         <button class="ingredient-del" data-del="${ing.id}">&times;</button>
       </div>
     `).join('');
+
     $all('.ingredient-row', list).forEach((row) => {
       const id = row.dataset.ingId;
       const ing = previewDraft.ingredients.find((i) => i.id === id);
-      $('[data-field="name"]', row).addEventListener('input', (e) => { ing.name = e.target.value; });
+
+      $('[data-field="name"]', row).addEventListener('input', (e) => {
+        ing.name = e.target.value;
+      });
+
       $('[data-field="weight"]', row).addEventListener('input', (e) => {
         const newWeight = Number(e.target.value) || 0;
         const ratio = ing.weight > 0 ? newWeight / ing.weight : 1;
@@ -389,6 +387,7 @@ const Diary = (() => {
         $('.ingredient-kcal', row).textContent = `${round(ing.kcal)} ккал`;
       });
     });
+
     $all('[data-del]', list).forEach((btn) => {
       btn.addEventListener('click', () => {
         previewDraft.ingredients = previewDraft.ingredients.filter((i) => i.id !== btn.dataset.del);
@@ -422,12 +421,20 @@ const Diary = (() => {
       let result;
       if (pendingSource === 'photo') {
         result = await Api.analyzePhoto({
-          apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelPhoto,
-          imageDataUrl: pendingPhotoFull, text, clarificationAnswer: answer
+          apiKey: settings.apiKey,
+          baseUrl: settings.apiBaseUrl,
+          model: settings.modelPhoto,
+          imageDataUrl: pendingPhotoFull,
+          text,
+          clarificationAnswer: answer
         });
       } else {
         result = await Api.analyzeText({
-          apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text, clarificationAnswer: answer
+          apiKey: settings.apiKey,
+          baseUrl: settings.apiBaseUrl,
+          model: settings.modelText,
+          text,
+          clarificationAnswer: answer
         });
       }
       openPreviewModal(result);
@@ -473,14 +480,8 @@ const Diary = (() => {
   function onManualSave() {
     const name = el('manual-name').value.trim();
     const kcal = Number(el('manual-kcal').value) || 0;
-    if (!name) {
-      toast('Укажите название блюда', 'error');
-      return;
-    }
-    if (kcal <= 0) {
-      toast('Укажите калорийность', 'error');
-      return;
-    }
+    if (!name) { toast('Укажите название блюда', 'error'); return; }
+    if (kcal <= 0) { toast('Укажите калорийность', 'error'); return; }
     const meal = {
       title: name,
       source: 'manual',
@@ -509,8 +510,13 @@ const Diary = (() => {
     editDraftIngredients = (meal.ingredients && meal.ingredients.length)
       ? meal.ingredients.map((i) => ({ ...i }))
       : [{
-          id: uid('ing'), name: meal.title, weight: meal.weight || 0,
-          kcal: meal.kcal, protein: meal.protein, fat: meal.fat, carbs: meal.carbs
+          id: uid('ing'),
+          name: meal.title,
+          weight: meal.weight || 0,
+          kcal: meal.kcal,
+          protein: meal.protein,
+          fat: meal.fat,
+          carbs: meal.carbs
         }];
     el('edit-meal-name').value = meal.title;
     el('edit-meal-ai-text').value = '';
@@ -550,11 +556,16 @@ const Diary = (() => {
         </div>
       </div>
     `).join('');
+
     $all('.ingredient-row-edit', list).forEach((row) => {
       const id = row.dataset.ingId;
       const ing = editDraftIngredients.find((i) => i.id === id);
       const kcalLabel = $('[data-field-kcal]', row);
-      $('[data-field="name"]', row).addEventListener('input', (e) => { ing.name = e.target.value; });
+
+      $('[data-field="name"]', row).addEventListener('input', (e) => {
+        ing.name = e.target.value;
+      });
+
       $('[data-field="weight"]', row).addEventListener('input', (e) => {
         const newWeight = Number(e.target.value) || 0;
         const ratio = ing.weight > 0 ? newWeight / ing.weight : 1;
@@ -570,24 +581,29 @@ const Diary = (() => {
         $('[data-field="carbs"]', row).value = round(ing.carbs, 1);
         renderEditTotals();
       });
+
       $('[data-field="protein"]', row).addEventListener('input', (e) => {
         ing.protein = Number(e.target.value) || 0;
         renderEditTotals();
       });
+
       $('[data-field="fat"]', row).addEventListener('input', (e) => {
         ing.fat = Number(e.target.value) || 0;
         renderEditTotals();
       });
+
       $('[data-field="carbs"]', row).addEventListener('input', (e) => {
         ing.carbs = Number(e.target.value) || 0;
         renderEditTotals();
       });
+
       $('[data-field="kcal"]', row).addEventListener('input', (e) => {
         ing.kcal = Number(e.target.value) || 0;
         kcalLabel.textContent = `${round(ing.kcal)} ккал`;
         renderEditTotals();
       });
     });
+
     $all('[data-del]', list).forEach((btn) => {
       btn.addEventListener('click', () => {
         editDraftIngredients = editDraftIngredients.filter((i) => i.id !== btn.dataset.del);
@@ -597,12 +613,7 @@ const Diary = (() => {
     });
   }
 
-  // The "Итого" totals block was removed from the edit-meal card for a more
-  // minimal layout; this function is kept as a no-op so existing call sites
-  // (triggered on every ingredient edit) don't need to be touched one by one.
-  function renderEditTotals() {
-    // intentionally empty - no totals UI to update anymore
-  }
+  function renderEditTotals() {}
 
   async function onEditMealAi() {
     const text = el('edit-meal-ai-text').value.trim();
@@ -613,7 +624,12 @@ const Diary = (() => {
     openLoadingModal();
     const settings = Storage.getSettings();
     try {
-      const result = await Api.analyzeText({ apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text });
+      const result = await Api.analyzeText({
+        apiKey: settings.apiKey,
+        baseUrl: settings.apiBaseUrl,
+        model: settings.modelText,
+        text
+      });
       const newIngredients = (result.ingredients || []).map((ing) => ({
         id: uid('ing'),
         name: ing.name || 'Ингредиент',
@@ -714,7 +730,6 @@ const Diary = (() => {
 
     el('btn-weight-save').addEventListener('click', onSaveWeight);
 
-    // Generic close buttons (data-close attribute) for all modals
     $all('[data-close]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.dataset.close;
@@ -722,6 +737,7 @@ const Diary = (() => {
         else Utils.closeModal(id);
       });
     });
+
     $all('.modal-overlay').forEach((overlay) => {
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) {
@@ -734,7 +750,7 @@ const Diary = (() => {
 
   function init() {
     currentDate = Utils.todayKey();
-    Storage.touchStreak(); // opening the app counts toward today's streak
+    Storage.touchStreak();
     bindEvents();
     renderDay();
   }
