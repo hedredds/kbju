@@ -63,14 +63,14 @@ const Storage = (() => {
   // SETTINGS_VERSION gates one-time API config migrations (see migrateSettings
   // below). Bump it whenever apiBaseUrl/model defaults change so existing
   // users on an older localStorage automatically pick up the new values.
-  const SETTINGS_VERSION = 2;
+  const SETTINGS_VERSION = 3;
   const DEFAULT_SETTINGS = {
     settingsVersion: SETTINGS_VERSION,
     theme: 'light',
-    apiKey: '',
+    apiKey: 'sk-cb8f4581c076dc2d42d028de823c3aedb6d0bd6e619fa607756b998e935871c3',
     apiBaseUrl: 'https://bitter-night-9507.artem-kyznitsov2007.workers.dev/v1',
-    modelText: 'gemini-2.5-flash-lite',
-    modelPhoto: 'gemini-2.5-flash',
+    modelText: 'gpt-6-luna',
+    modelPhoto: 'gpt-6-luna',
     targets: { kcal: 2000, protein: 120, fat: 70, carbs: 230 }
   };
 
