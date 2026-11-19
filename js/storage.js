@@ -60,18 +60,44 @@ const Storage = (() => {
   }
 
   // ---------- Settings ----------
+  // SETTINGS_VERSION gates one-time API config migrations (see migrateSettings
+  // below). Bump it whenever apiBaseUrl/model defaults change so existing
+  // users on an older localStorage automatically pick up the new values.
+  const SETTINGS_VERSION = 2;
   const DEFAULT_SETTINGS = {
+    settingsVersion: SETTINGS_VERSION,
     theme: 'light',
     apiKey: '',
-    apiBaseUrl: 'https://rurout.online/v1',
+    apiBaseUrl: 'https://bitter-night-9507.artem-kyznitsov2007.workers.dev/v1',
     modelText: 'gemini-2.5-flash-lite',
     modelPhoto: 'gemini-2.5-flash',
     targets: { kcal: 2000, protein: 120, fat: 70, carbs: 230 }
   };
+
+  // Migrates settings written by older app versions: updates the API
+  // endpoint/model defaults to the current ones, without touching the
+  // user's apiKey, KBJU targets, or any diary/weight history. `rawVersion`
+  // is the settingsVersion of the *stored* object (before defaults were
+  // merged in) so pre-migration settings (missing the field entirely) are
+  // correctly detected as version 0, not silently upgraded by the merge.
+  function migrateSettings(merged, rawVersion) {
+    if ((rawVersion || 0) >= SETTINGS_VERSION) return merged;
+    return {
+      ...merged,
+      settingsVersion: SETTINGS_VERSION,
+      apiBaseUrl: DEFAULT_SETTINGS.apiBaseUrl,
+      modelText: DEFAULT_SETTINGS.modelText,
+      modelPhoto: DEFAULT_SETTINGS.modelPhoto
+    };
+  }
+
   function getSettings() {
     const s = read(KEYS.SETTINGS, null);
     if (!s) return { ...DEFAULT_SETTINGS };
-    return { ...DEFAULT_SETTINGS, ...s, targets: { ...DEFAULT_SETTINGS.targets, ...(s.targets || {}) } };
+    const merged = { ...DEFAULT_SETTINGS, ...s, targets: { ...DEFAULT_SETTINGS.targets, ...(s.targets || {}) } };
+    const migrated = migrateSettings(merged, s.settingsVersion);
+    if ((s.settingsVersion || 0) < SETTINGS_VERSION) write(KEYS.SETTINGS, migrated);
+    return migrated;
   }
   function setSettings(settings) {
     return write(KEYS.SETTINGS, settings);

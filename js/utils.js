@@ -3,6 +3,10 @@
 
 const Utils = (() => {
   const MONTHS_RU = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  const MONTHS_FULL_RU = [
+    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+  ];
   const WEEKDAYS_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
   const WEEKDAYS_MON_RU = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
@@ -66,6 +70,12 @@ const Utils = (() => {
   function weekDays(key) {
     const start = weekStart(key);
     return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  }
+
+  // "Ноябрь 2026" - full month name + year, shown above the week strip.
+  function formatMonthYear(key) {
+    const d = parseKey(key);
+    return `${MONTHS_FULL_RU[d.getMonth()]} ${d.getFullYear()}`;
   }
 
   function formatTime(ts) {
@@ -154,7 +164,7 @@ const Utils = (() => {
   return {
     openModal, closeModal,
     pad2, dateKey, todayKey, parseKey, addDays,
-    formatDayLabel, formatDayShort, formatWeekday, formatTime,
+    formatDayLabel, formatDayShort, formatWeekday, formatTime, formatMonthYear,
     weekStart, weekDays, WEEKDAYS_MON_RU,
     round, clamp,
     $, $all, el, show, hide, escapeHtml,

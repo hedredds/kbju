@@ -7,7 +7,7 @@ const Diary = (() => {
   const { el, $, $all, show, hide, escapeHtml, toast, round, uid } = Utils;
 
   let currentDate = Utils.todayKey();
-  let pendingPhotoFull = null;   // compressed data URL sent to API (max 768px)
+  let pendingPhotoFull = null;   // compressed data URL sent to API (max 640px)
   let pendingPhotoThumb = null;  // small thumbnail for storage (~300px)
   let pendingSource = 'text';    // 'photo' | 'text'
   let previewDraft = null;       // { title, ingredients, clarificationQuestion }
@@ -15,28 +15,24 @@ const Diary = (() => {
 
   const RING_CIRCUMFERENCE = Math.PI * 100; // half-circle arc length, r=100 per index.html svg
 
-  // ---------- AI loading modal: spinner + countdown timer ----------
-  // Text analysis typically responds in ~3s, photo analysis in ~6s (larger
-  // payload). The countdown is only an expectation hint - if it runs out
-  // before the request finishes, we switch to a generic "almost done" label
-  // rather than showing a confusing negative/zero countdown.
+  // ---------- AI loading modal: spinner + live stopwatch ----------
   let loadingTimerId = null;
+  let loadingStartedAt = 0;
 
-  function startLoadingTimer(kind) {
+  // Honest live stopwatch - ticks up every second for as long as the request
+  // is actually in flight ("Анализируем... 1 с", "2 с", ...). It never
+  // freezes or lies about a fake remaining time; it is always reset in
+  // stopLoadingTimer(), which closeLoadingModal() calls from a finally block.
+  function startLoadingTimer() {
     stopLoadingTimer();
-    let secondsLeft = kind === 'photo' ? 6 : 3;
+    loadingStartedAt = Date.now();
     const textEl = el('loading-text');
     const timerEl = el('loading-timer');
     if (textEl) textEl.textContent = 'Анализируем...';
-    if (timerEl) timerEl.textContent = `~${secondsLeft} сек`;
+    if (timerEl) timerEl.textContent = '0 с';
     loadingTimerId = setInterval(() => {
-      secondsLeft -= 1;
-      if (secondsLeft > 0) {
-        if (timerEl) timerEl.textContent = `~${secondsLeft} сек`;
-      } else {
-        if (timerEl) timerEl.textContent = '';
-        if (textEl) textEl.textContent = 'Почти готово...';
-      }
+      const elapsedSec = Math.floor((Date.now() - loadingStartedAt) / 1000);
+      if (timerEl) timerEl.textContent = `${elapsedSec} с`;
     }, 1000);
   }
 
@@ -45,18 +41,16 @@ const Diary = (() => {
       clearInterval(loadingTimerId);
       loadingTimerId = null;
     }
-    const textEl = el('loading-text');
     const timerEl = el('loading-timer');
-    if (textEl) textEl.textContent = 'Анализируем...';
     if (timerEl) timerEl.textContent = '';
   }
 
   // Always pair with closeLoadingModal() in a finally block so the spinner
-  // and the countdown timer never get stuck on screen, even if the request
-  // throws, times out, or returns malformed data.
-  function openLoadingModal(kind) {
+  // and the timer never get stuck on screen, even if the request throws,
+  // times out, or returns malformed data.
+  function openLoadingModal() {
     Utils.openModal('modal-loading');
-    startLoadingTimer(kind);
+    startLoadingTimer();
   }
 
   function closeLoadingModal() {
@@ -98,9 +92,10 @@ const Diary = (() => {
 
   // ---------- Week strip (Mon-Sun calendar replacing the prev/next day arrows) ----------
   function renderWeekStrip() {
-    weekAnchor = currentDate;
     const days = Utils.weekDays(currentDate);
     const today = Utils.todayKey();
+    const monthLabelEl = el('week-month-label');
+    if (monthLabelEl) monthLabelEl.textContent = Utils.formatMonthYear(currentDate);
     const container = el('week-days');
     container.innerHTML = days.map((key, i) => {
       const dayNum = Number(key.slice(8, 10));
@@ -112,7 +107,7 @@ const Diary = (() => {
       return `
         <button class="${cls.join(' ')}" data-date="${key}">
           <span class="week-day-dow">${Utils.WEEKDAYS_MON_RU[i]}</span>
-          <span class="week-day-num">${dayNum}</span>
+          <span class="week-day-circle"><span class="week-day-num">${dayNum}</span></span>
         </button>
       `;
     }).join('');
@@ -138,6 +133,32 @@ const Diary = (() => {
     if (countEl) countEl.textContent = streak.count || 0;
     const badge = el('streak-badge');
     if (badge) badge.classList.toggle('streak-active', (streak.count || 0) > 0);
+  }
+
+  // Opens a small explanatory popup when the user taps the streak flame -
+  // the count itself is already visible on the badge, this just explains
+  // what it means and restates the current value.
+  function onStreakClick() {
+    const streak = Storage.getStreak();
+    const count = streak.count || 0;
+    const titleEl = el('streak-modal-count');
+    if (titleEl) titleEl.textContent = count;
+    const textEl = el('streak-modal-text');
+    if (textEl) {
+      textEl.textContent = count > 0
+        ? `Вы заходите в приложение ${count} ${pluralDays(count)} подряд. Открывайте KBJU и записывайте питание каждый день, чтобы не потерять серию.`
+        : 'Серия дней подряд в приложении. Заходите и ведите дневник каждый день, чтобы начать счет.';
+    }
+    Utils.openModal('modal-streak');
+  }
+
+  function pluralDays(n) {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 14) return 'дней';
+    if (mod10 === 1) return 'день';
+    if (mod10 >= 2 && mod10 <= 4) return 'дня';
+    return 'дней';
   }
 
   function renderMacroBar(key, value, target) {
@@ -247,7 +268,7 @@ const Diary = (() => {
       const file = input.files && input.files[0];
       if (!file) return;
       try {
-        const compressed = await Api.compressImage(file, 768, 0.65);
+        const compressed = await Api.compressImage(file, 640, 0.6);
         await handleCapturedPhoto(compressed, true);
       } catch (e) {
         toast(e.message, 'error');
@@ -258,7 +279,7 @@ const Diary = (() => {
 
   async function handleCapturedPhoto(dataUrl, alreadyCompressed = false) {
     try {
-      pendingPhotoFull = alreadyCompressed ? dataUrl : await Api.compressDataUrl(dataUrl, 768, 0.65);
+      pendingPhotoFull = alreadyCompressed ? dataUrl : await Api.compressDataUrl(dataUrl, 640, 0.6);
       pendingPhotoThumb = await Api.makeThumbnail(dataUrl, 300, 0.6);
       pendingSource = 'photo';
       openCommentModal();
@@ -299,7 +320,7 @@ const Diary = (() => {
       return;
     }
     Utils.closeModal('modal-comment');
-    openLoadingModal(pendingSource);
+    openLoadingModal();
     const settings = Storage.getSettings();
     try {
       let result;
@@ -395,7 +416,7 @@ const Diary = (() => {
     }
     const text = el('comment-text') ? el('comment-text').value.trim() : '';
     Utils.closeModal('modal-preview');
-    openLoadingModal(pendingSource);
+    openLoadingModal();
     const settings = Storage.getSettings();
     try {
       let result;
@@ -589,7 +610,7 @@ const Diary = (() => {
       toast('Опишите, что нужно добавить', 'error');
       return;
     }
-    openLoadingModal('text');
+    openLoadingModal();
     const settings = Storage.getSettings();
     try {
       const result = await Api.analyzeText({ apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl, model: settings.modelText, text });
@@ -667,6 +688,7 @@ const Diary = (() => {
   function bindEvents() {
     el('week-prev').addEventListener('click', () => changeWeek(-1));
     el('week-next').addEventListener('click', () => changeWeek(1));
+    el('streak-badge').addEventListener('click', onStreakClick);
 
     el('fab-add').addEventListener('click', openFabMenu);
     el('fab-overlay').addEventListener('click', (e) => {

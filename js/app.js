@@ -39,13 +39,25 @@ const App = (() => {
     document.documentElement.setAttribute('data-theme', settings.theme || 'light');
   }
 
+  // Each module's init() is isolated behind its own try/catch so a bug in
+  // one page (e.g. Diary) can never prevent the other pages (Stats,
+  // Settings) from wiring up their own buttons - previously a single
+  // uncaught error here silently broke the whole app shell.
+  function safeInit(name, fn) {
+    try {
+      fn();
+    } catch (e) {
+      console.error(`${name}.init failed`, e);
+    }
+  }
+
   function startMainApp() {
     applyTheme();
     show('app');
     bindTabBar();
-    Diary.init();
-    Stats.init();
-    SettingsPage.init();
+    safeInit('Diary', Diary.init);
+    safeInit('Stats', Stats.init);
+    safeInit('SettingsPage', SettingsPage.init);
   }
 
   function startOnboarding() {

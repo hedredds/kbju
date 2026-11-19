@@ -1,13 +1,13 @@
-/* api.js - RuRout AI integration: image compression + chat completions wrapper.
- * Default endpoint: https://rurout.online/v1/chat/completions
+/* api.js - AI integration: image compression + chat completions wrapper.
+ * Default endpoint: https://bitter-night-9507.artem-kyznitsov2007.workers.dev/v1/chat/completions
  * Text analysis model: gemini-2.5-flash-lite
  * Photo analysis model: gemini-2.5-flash
  */
 'use strict';
 
 const Api = (() => {
-  const DEFAULT_BASE_URL = 'https://rurout.online/v1';
-  const REQUEST_TIMEOUT_MS = 30000;
+  const DEFAULT_BASE_URL = 'https://bitter-night-9507.artem-kyznitsov2007.workers.dev/v1';
+  const REQUEST_TIMEOUT_MS = 45000;
 
   // Builds the full chat completions endpoint from a configurable base URL,
   // trimming any trailing slash(es) so "https://host/v1/" and "https://host/v1"
@@ -102,7 +102,7 @@ const Api = (() => {
         });
       } catch (e) {
         if (e.name === 'AbortError') {
-          throw new Error('Сервис ИИ не ответил за 30 секунд - запрос прерван по таймауту. Попробуйте еще раз.');
+          throw new Error('Сервис ИИ не ответил за 45 секунд - запрос прерван по таймауту. Попробуйте еще раз.');
         }
         // A TypeError from fetch with no HTTP response usually means the request
         // never reached the server - most commonly a CORS block, an unreachable/
@@ -138,9 +138,10 @@ const Api = (() => {
 
   // ---------- Image compression (Canvas) ----------
   // Returns a base64 JPEG data URL compressed to maxDim px, quality `quality`.
-  // Default 768px/0.65 keeps requests to the AI small and fast while staying
-  // sharp enough for reliable food recognition.
-  function compressImage(file, maxDim = 768, quality = 0.65) {
+  // Default 640px/0.6 keeps requests to the AI small enough to fly through the
+  // proxy instantly, avoiding timeouts, while staying sharp enough for
+  // reliable food recognition.
+  function compressImage(file, maxDim = 640, quality = 0.6) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       const reader = new FileReader();
@@ -214,7 +215,7 @@ const Api = (() => {
 
   // Compress a data URL (not a File) - used for camera captures which are
   // already data URLs produced by canvas.toDataURL in camera.js.
-  function compressDataUrl(dataUrl, maxDim = 768, quality = 0.65) {
+  function compressDataUrl(dataUrl, maxDim = 640, quality = 0.6) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {

@@ -50,6 +50,7 @@
       </div>
     </header>
 
+    <div class="week-month-label" id="week-month-label">Ноябрь 2026</div>
     <div class="week-strip">
       <button class="week-nav-btn" id="week-prev" aria-label="Предыдущая неделя">
         <svg width="16" height="16" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -161,7 +162,7 @@
 
       <div class="settings-group glass">
         <div class="settings-group-title">Настройки API</div>
-        <div class="settings-field"><label>Base URL</label><input type="text" id="set-api-baseurl" autocomplete="off" placeholder="https://rurout.online/v1"></div>
+        <div class="settings-field"><label>Base URL</label><input type="text" id="set-api-baseurl" autocomplete="off" placeholder="https://bitter-night-9507.artem-kyznitsov2007.workers.dev/v1"></div>
         <div class="settings-field"><label>API-ключ</label><input type="text" id="set-apikey" autocomplete="off"></div>
         <div class="settings-field"><label>Модель для текста</label><input type="text" id="set-model-text" autocomplete="off"></div>
         <div class="settings-field"><label>Модель для фото</label><input type="text" id="set-model-photo" autocomplete="off"></div>
@@ -177,7 +178,7 @@
 
       <div class="settings-group glass">
         <div class="settings-group-title">О приложении</div>
-        <div class="settings-row"><span>Версия</span><span class="muted">1.1.0</span></div>
+        <div class="settings-row"><span>Версия</span><span class="muted">1.1.1</span></div>
         <button class="link-btn" id="link-policy">Политика конфиденциальности</button>
         <button class="link-btn" id="link-terms">Пользовательское соглашение</button>
       </div>
@@ -335,6 +336,24 @@
       <button class="icon-btn" data-close="modal-day-detail">&times;</button>
     </div>
     <div class="modal-body" id="day-detail-body"></div>
+  </div>
+</div>
+
+<!-- ============ MODAL: STREAK ============ -->
+<div id="modal-streak" class="modal-overlay hidden">
+  <div class="modal-sheet streak-modal-sheet">
+    <div class="modal-head">
+      <h3>Серия дней</h3>
+      <button class="icon-btn" data-close="modal-streak">&times;</button>
+    </div>
+    <div class="modal-body streak-modal-body">
+      <div class="streak-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M12 2c1.2 3-2.8 4.2-2.8 7.4a2.8 2.8 0 005.6 0c0-.9-.5-1.6-.9-2 2 1 4.1 3.3 4.1 6.1a6 6 0 11-12 0c0-4.1 3-6.3 4.1-8.4.8-1.3 1.2-2.1 1.9-3.1z" fill="currentColor"/></svg>
+      </div>
+      <div class="streak-modal-count" id="streak-modal-count">0</div>
+      <div class="streak-modal-label">дней подряд</div>
+      <p class="streak-modal-text" id="streak-modal-text"></p>
+    </div>
   </div>
 </div>
 
